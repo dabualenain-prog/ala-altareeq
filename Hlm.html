@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>على الطريق</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.css">
+<style>
+  :root{
+    --navy:#2B3A67; --navy-soft:#5A6B8C;
+    --sky-light:#EAF6FB; --orange:#F4A261; --gold:#FFD866; --green:#3DBE8B; --pink:#E77FA0; --brown:#8B6B4A;
+    --white:#FFFFFF; --shadow: 0 10px 24px rgba(43,58,103,.14);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{ font-family:"Tajawal","Segoe UI",Verdana,sans-serif; background:var(--sky-light); color:var(--navy); display:flex; justify-content:center; }
+  #app{ position:relative; width:100%; max-width:480px; min-height:100%; background:var(--sky-light); overflow:hidden; }
+  .screen{ position:absolute; inset:0; display:flex; flex-direction:column; opacity:0; pointer-events:none; transition:opacity .25s ease; }
+  .screen.active{ opacity:1; pointer-events:auto; }
+
+  .topbar{ padding:16px 18px 10px; display:flex; align-items:center; gap:10px; }
+  .iconbtn{ width:38px; height:38px; border-radius:50%; background:var(--white); border:none; box-shadow:var(--shadow); font-size:18px; cursor:pointer; }
+  h1{ font-size:20px; margin:0; }
+  .sub{ font-size:12.5px; color:var(--navy-soft); margin:2px 0 0; }
+
+  .formscreen{ padding:0 18px 24px; overflow-y:auto; }
+  .hero{ padding:28px 2px 6px; }
+  .hero h1{ font-size:25px; line-height:1.35; }
+  .hero p{ color:var(--navy-soft); font-size:14px; margin:6px 0 0; }
+  .field-stack{ margin-top:22px; display:flex; flex-direction:column; gap:10px; position:relative; }
+  .field{ display:flex; align-items:center; gap:10px; background:var(--white); border-radius:16px; padding:13px 14px; box-shadow:var(--shadow); position:relative; }
+  .dot{ width:10px; height:10px; border-radius:50%; flex:0 0 auto; }
+  .dot.start{ background:var(--green); } .dot.end{ background:var(--orange); }
+  .field input{ border:none; outline:none; font-family:inherit; font-size:15px; background:transparent; color:var(--navy); width:100%; }
+  .field input::placeholder{ color:#A8B2CC; }
+  .locbtn{ border:none; background:none; font-size:16px; cursor:pointer; }
+  .suggestlist{ position:absolute; top:100%; right:0; left:0; background:#fff; border-radius:14px; box-shadow:var(--shadow); margin-top:4px; z-index:50; overflow:hidden; display:none; }
+  .suggestlist div{ padding:10px 14px; font-size:13.5px; cursor:pointer; border-bottom:1px solid #F0F2F8; }
+  .suggestlist div:last-child{ border-bottom:none; }
+  .suggestlist div:hover{ background:#F6F8FC; }
+
+  .section-title{ font-size:14px; font-weight:700; margin:22px 2px 10px; }
+  .chips{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .chip{ background:var(--white); border:2px solid transparent; border-radius:16px; padding:14px 6px; text-align:center; cursor:pointer; box-shadow:var(--shadow); font-family:inherit; }
+  .chip .emoji{ font-size:24px; display:block; }
+  .chip .lbl{ font-size:12.5px; font-weight:700; display:block; margin-top:4px; }
+  .chip.selected{ border-color:var(--orange); background:#FFF3E6; }
+
+  .cta{ margin-top:26px; width:100%; border:none; border-radius:18px; padding:16px; font-family:inherit; font-size:16px; font-weight:700; color:#fff; background:#C9CFE0; cursor:not-allowed; }
+  .cta.ready{ background:var(--orange); cursor:pointer; box-shadow:0 10px 20px rgba(244,162,97,.4); }
+  .route-chip{ display:inline-flex; gap:6px; background:var(--white); border-radius:12px; padding:8px 12px; box-shadow:var(--shadow); font-size:12.5px; color:var(--navy-soft); margin-top:16px; }
+  .route-chip b{ color:var(--navy); }
+
+  .routebar{ margin:0 14px 10px; background:var(--white); border-radius:16px; padding:10px 14px; box-shadow:var(--shadow); font-size:13px; }
+  .mapwrap{ position:relative; flex:1; margin:0 10px; border-radius:22px 22px 0 0; overflow:hidden; }
+  #leafmap{ width:100%; height:100%; }
+  .leaflet-routing-container{ display:none; } /* نخفي لوحة التوجيه الافتراضية، نستخدم واجهتنا فقط */
+  .loading{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:var(--sky-light); font-size:14px; color:var(--navy-soft); z-index:5; }
+  .poi-pin{ width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:15px; border:3px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,.25); }
+
+  .sheet-backdrop{ position:absolute; inset:0; background:rgba(27,35,64,.35); opacity:0; pointer-events:none; transition:opacity .25s ease; z-index:20;}
+  .sheet-backdrop.show{ opacity:1; pointer-events:auto; }
+  .sheet{ position:absolute; left:0; right:0; bottom:0; background:var(--white); border-radius:26px 26px 0 0; padding:10px 20px 22px; box-shadow:0 -10px 30px rgba(27,35,64,.25); transform:translateY(100%); transition:transform .3s cubic-bezier(.2,.8,.3,1); z-index:21; }
+  .sheet.show{ transform:translateY(0); }
+  .handle{ width:44px; height:5px; border-radius:3px; background:#E3E8F3; margin:6px auto 14px; }
+  .store-head{ display:flex; align-items:center; gap:12px; }
+  .store-ico{ width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:24px; flex:0 0 auto; }
+  .store-head h2{ font-size:17px; margin:0; } .store-head p{ font-size:13px; color:var(--navy-soft); margin:3px 0 0; }
+  .choice-row{ display:flex; gap:10px; margin-top:18px; }
+  .choice{ flex:1; border:2px solid #E3E8F3; background:#fff; border-radius:16px; padding:12px 8px; text-align:center; cursor:pointer; font-family:inherit; }
+  .choice .ic{ font-size:20px; display:block; } .choice .t{ font-size:13px; font-weight:700; margin-top:5px; display:block; }
+  .choice.active{ border-color:var(--green); background:#EAFBF4; }
+  .confirm-btn{ margin-top:18px; width:100%; border:none; border-radius:16px; padding:15px; font-family:inherit; font-size:15.5px; font-weight:700; color:#fff; background:var(--green); cursor:pointer; }
+
+  .toast-backdrop{ position:absolute; inset:0; background:rgba(27,35,64,.4); display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity .25s ease; padding:24px; z-index:22;}
+  .toast-backdrop.show{ opacity:1; pointer-events:auto; }
+  .toast{ background:#fff; border-radius:22px; padding:28px 22px; text-align:center; max-width:320px; box-shadow:var(--shadow); }
+  .toast .check{ width:60px; height:60px; border-radius:50%; background:var(--green); color:#fff; font-size:28px; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; }
+  .toast button{ margin-top:18px; border:none; background:var(--orange); color:#fff; font-weight:700; border-radius:14px; padding:12px 20px; cursor:pointer; width:100%; font-family:inherit; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <section id="home" class="screen active formscreen">
+    <div class="hero"><h1>وين أنت، ووين رايح؟</h1><p>حدد موقعك الحالي ووجهتك عشان نجهّز لك طريقك</p></div>
+    <div class="field-stack">
+      <div class="field"><span class="dot start"></span><input id="fromInput" placeholder="موقعي الحالي"><button class="locbtn" id="useLocBtn" title="استخدم موقعي">📍</button></div>
+      <div class="field"><span class="dot end"></span><input id="toInput" placeholder="إلى أين؟ اكتب وجهتك..."><div class="suggestlist" id="toSuggest"></div></div>
+    </div>
+    <button class="cta" id="nextBtn">التالي</button>
+  </section>
+
+  <section id="needs" class="screen formscreen">
+    <div class="topbar" style="padding-right:2px;"><button class="iconbtn" id="backBtn1">→</button><h1 style="font-size:18px;">طيب، إيش تحتاج بالطريق؟</h1></div>
+    <div class="route-chip">من <b>موقعك</b> ← إلى <b id="needsToLabel"></b></div>
+    <p class="section-title">اختر وحدة أو أكثر</p>
+    <div class="chips" id="chips">
+      <button class="chip" data-cat="grocery"><span class="emoji">🛒</span><span class="lbl">بقالة</span></button>
+      <button class="chip" data-cat="pharmacy"><span class="emoji">💊</span><span class="lbl">صيدلية</span></button>
+      <button class="chip" data-cat="food"><span class="emoji">🍽️</span><span class="lbl">مطعم</span></button>
+      <button class="chip" data-cat="coffee"><span class="emoji">☕</span><span class="lbl">قهوة</span></button>
+      <button class="chip" data-cat="flowers"><span class="emoji">🌸</span><span class="lbl">ورد</span></button>
+      <button class="chip" data-cat="sweets"><span class="emoji">🍰</span><span class="lbl">حلا</span></button>
+    </div>
+    <button class="cta ready" id="goBtn">ابحث عن طريقي</button>
+  </section>
+
+  <section id="map" class="screen">
+    <div class="topbar"><button class="iconbtn" id="backBtn2">→</button><div><h1 style="font-size:17px;">إيش موجود على طريقك</h1><p class="sub" id="routeLabel"></p></div></div>
+    <div class="routebar" id="routeInfo"></div>
+    <div class="mapwrap"><div id="leafmap"></div><div class="loading" id="mapLoading">نجهّز الخريطة والطريق...</div></div>
+  </section>
+
+  <div class="sheet-backdrop" id="sheetBackdrop"></div>
+  <div class="sheet" id="sheet">
+    <div class="handle"></div>
+    <div class="store-head"><div class="store-ico" id="storeIco"></div><div><h2 id="storeName"></h2><p id="storeDesc"></p></div></div>
+    <p class="section-title" style="margin-top:18px;">كيف تحب تستلم؟</p>
+    <div class="choice-row">
+      <button class="choice" id="choicePickup"><span class="ic">🏬</span><span class="t">من المتجر</span></button>
+      <button class="choice" id="choiceDeliver"><span class="ic">🚗</span><span class="t">للسيارة</span></button>
+    </div>
+    <button class="confirm-btn" id="confirmBtn">أكّد الطلب</button>
+  </div>
+
+  <div class="toast-backdrop" id="toastBackdrop">
+    <div class="toast"><div class="check">✓</div><h3>طلبك في الطريق!</h3><p id="toastMsg"></p><button id="toastClose">رجوع للخريطة</button></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.min.js"></script>
+<script>
+/* ========================================================================
+   على الطريق — نسخة مجانية بالكامل، بدون مفتاح API وبدون بطاقة بنكية:
+   - الخريطة والبيانات: OpenStreetMap (عبر مكتبة Leaflet)
+   - البحث عن العناوين: Nominatim
+   - رسم المسار: OSRM (خادم تجريبي عام)
+   - البحث عن متاجر حقيقية على الطريق: Overpass API
+   ملاحظة: هذه خوادم عامة مجانية بحدود استخدام معقولة — مناسبة للتجربة والعرض،
+   وإذا كبر المشروع لاحقًا يُفضّل الانتقال لخدمة مدفوعة بسيطة (مثل LocationIQ
+   أو Geoapify) لضمان استقرار واستجابة أسرع عند الاستخدام الكبير.
+   ======================================================================== */
+
+var CATEGORY_META = {
+  grocery:{emoji:'🛒', color:'#F4A261', label:'بقالة', osm:['shop=supermarket','shop=convenience']},
+  pharmacy:{emoji:'💊', color:'#3DBE8B', label:'صيدلية', osm:['amenity=pharmacy']},
+  food:{emoji:'🍽️', color:'#E24B4A', label:'مطعم', osm:['amenity=restaurant','amenity=fast_food']},
+  coffee:{emoji:'☕', color:'#8B6B4A', label:'قهوة', osm:['amenity=cafe']},
+  flowers:{emoji:'🌸', color:'#E77FA0', label:'ورد', osm:['shop=florist']},
+  sweets:{emoji:'🍰', color:'#FFD866', label:'حلا', osm:['shop=bakery','shop=confectionery']}
+};
+var DEFAULT_CENTER = [21.5750, 39.1500]; // طريق الملك عبدالعزيز، جدة
+
+var map, routingControl, poiLayer;
+var fromLatLng = null, toLatLng = null, toText = '';
+var selectedCats = new Set();
+var activeStore = null, receiveMode = null;
+
+function showScreen(id){
+  ['home','needs','map'].forEach(function(s){ document.getElementById(s).classList.remove('active'); });
+  document.getElementById(id).classList.add('active');
+}
+
+/* ---------- geolocation for "from" ---------- */
+document.getElementById('useLocBtn').addEventListener('click', function(){
+  if(!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(function(pos){
+    fromLatLng = [pos.coords.latitude, pos.coords.longitude];
+    fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + fromLatLng[0] + '&lon=' + fromLatLng[1])
+      .then(function(r){ return r.json(); })
+      .then(function(d){ document.getElementById('fromInput').value = d.display_name || 'موقعي الحالي'; checkReady(); })
+      .catch(function(){ document.getElementById('fromInput').value = 'موقعي الحالي'; checkReady(); });
+  });
+});
+
+/* ---------- destination search (Nominatim autocomplete) ---------- */
+var toInput = document.getElementById('toInput');
+var toSuggest = document.getElementById('toSuggest');
+var searchTimer = null;
+toInput.addEventListener('input', function(){
+  toLatLng = null;
+  clearTimeout(searchTimer);
+  var q = toInput.value.trim();
+  if(q.length < 3){ toSuggest.style.display = 'none'; checkReady(); return; }
+  searchTimer = setTimeout(function(){
+    fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=sa&q=' + encodeURIComponent(q))
+      .then(function(r){ return r.json(); })
+      .then(function(results){
+        toSuggest.innerHTML = '';
+        if(!results.length){ toSuggest.style.display = 'none'; return; }
+        results.forEach(function(r){
+          var div = document.createElement('div');
+          div.textContent = r.display_name;
+          div.addEventListener('click', function(){
+            toInput.value = r.display_name;
+            toText = r.display_name;
+            toLatLng = [parseFloat(r.lat), parseFloat(r.lon)];
+            toSuggest.style.display = 'none';
+            checkReady();
+          });
+          toSuggest.appendChild(div);
+        });
+        toSuggest.style.display = 'block';
+      }).catch(function(){ toSuggest.style.display = 'none'; });
+  }, 450);
+});
+
+function checkReady(){
+  var ready = !!toLatLng;
+  document.getElementById('nextBtn').classList.toggle('ready', ready);
+}
+
+document.getElementById('nextBtn').addEventListener('click', function(){
+  if(!document.getElementById('nextBtn').classList.contains('ready')) return;
+  document.getElementById('needsToLabel').textContent = toText;
+  showScreen('needs');
+});
+document.getElementById('backBtn1').addEventListener('click', function(){ showScreen('home'); });
+document.getElementById('backBtn2').addEventListener('click', function(){ showScreen('needs'); });
+
+document.querySelectorAll('.chip').forEach(function(chip){
+  chip.addEventListener('click', function(){
+    var cat = chip.getAttribute('data-cat');
+    if(selectedCats.has(cat)){ selectedCats.delete(cat); chip.classList.remove('selected'); }
+    else { selectedCats.add(cat); chip.classList.add('selected'); }
+  });
+});
+
+document.getElementById('goBtn').addEventListener('click', function(){
+  document.getElementById('routeLabel').textContent = 'من ' + (document.getElementById('fromInput').value || 'موقعي الحالي') + ' ← إلى ' + toText;
+  showScreen('map');
+  setTimeout(buildRoute, 60);
+});
+
+/* ---------- map + routing (OSRM) ---------- */
+function buildRoute(){
+  document.getElementById('mapLoading').style.display = 'flex';
+  var origin = fromLatLng || DEFAULT_CENTER;
+  var dest = toLatLng || DEFAULT_CENTER;
+
+  if(!map){
+    map = L.map('leafmap', {zoomControl:true}).setView(origin, 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors', maxZoom: 19
+    }).addTo(map);
+    poiLayer = L.layerGroup().addTo(map);
+  }
+  if(routingControl){ map.removeControl(routingControl); }
+
+  routingControl = L.Routing.control({
+    waypoints: [L.latLng(origin[0], origin[1]), L.latLng(dest[0], dest[1])],
+    router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' }),
+    lineOptions: { styles: [{color:'#F4A261', weight:6, opacity:.95}] },
+    createMarker: function(i, wp){
+      return L.marker(wp.latLng, { icon: L.divIcon({
+        className:'', html:'<div style="width:16px;height:16px;border-radius:50%;background:' + (i===0?'#3B6FD6':'#E24B4A') + ';border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);"></div>',
+        iconSize:[16,16], iconAnchor:[8,8]
+      })});
+    },
+    addWaypoints:false, draggableWaypoints:false, fitSelectedRoutes:true, show:false
+  }).addTo(map);
+
+  routingControl.on('routesfound', function(e){
+    document.getElementById('mapLoading').style.display = 'none';
+    var r = e.routes[0];
+    var km = (r.summary.totalDistance/1000).toFixed(1);
+    var min = Math.round(r.summary.totalTime/60);
+    document.getElementById('routeInfo').innerHTML = '<b>' + km + ' كم</b> · ' + min + ' دقيقة تقريبًا';
+    searchPOIsAlongRoute(r.coordinates);
+  });
+  routingControl.on('routingerror', function(){
+    document.getElementById('mapLoading').style.display = 'none';
+    document.getElementById('routeInfo').textContent = 'تعذّر رسم المسار — جرّبي وجهة أدق.';
+  });
+}
+
+/* ---------- POI search via Overpass API ---------- */
+function searchPOIsAlongRoute(coords){
+  poiLayer.clearLayers();
+  var lats = coords.map(function(c){ return c.lat; });
+  var lngs = coords.map(function(c){ return c.lng; });
+  var pad = 0.01;
+  var bbox = [Math.min.apply(null,lats)-pad, Math.min.apply(null,lngs)-pad, Math.max.apply(null,lats)+pad, Math.max.apply(null,lngs)+pad].join(',');
+
+  var cats = selectedCats.size ? Array.from(selectedCats) : Object.keys(CATEGORY_META);
+  var filters = [];
+  cats.forEach(function(cat){
+    CATEGORY_META[cat].osm.forEach(function(tag){
+      var parts = tag.split('=');
+      filters.push('node["' + parts[0] + '"="' + parts[1] + '"](' + bbox + ');');
+    });
+  });
+  var query = '[out:json][timeout:25];(' + filters.join('') + ');out center 40;';
+
+  fetch('https://overpass-api.de/api/interpreter', { method:'POST', body:'data=' + encodeURIComponent(query) })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      (data.elements || []).slice(0, 40).forEach(function(el){
+        var cat = matchCategory(el.tags);
+        if(!cat) return;
+        var meta = CATEGORY_META[cat];
+        var marker = L.marker([el.lat, el.lon], { icon: L.divIcon({
+          className:'', html:'<div class="poi-pin" style="background:' + meta.color + '">' + meta.emoji + '</div>',
+          iconSize:[30,30], iconAnchor:[15,15]
+        })});
+        marker.on('click', function(){
+          openSheet({
+            name: (el.tags && el.tags.name) || meta.label,
+            emoji: meta.emoji, color: meta.color,
+            desc: (el.tags && el.tags['addr:street']) ? ('بالقرب من ' + el.tags['addr:street']) : 'متجر حقيقي من بيانات OpenStreetMap'
+          });
+        });
+        marker.addTo(poiLayer);
+      });
+    })
+    .catch(function(){ /* صمت — المسار يبقى ظاهر حتى لو فشل بحث المتاجر */ });
+}
+function matchCategory(tags){
+  if(!tags) return null;
+  for(var cat in CATEGORY_META){
+    var found = CATEGORY_META[cat].osm.some(function(t){
+      var p = t.split('='); return tags[p[0]] === p[1];
+    });
+    if(found) return cat;
+  }
+  return null;
+}
+
+/* ---------- bottom sheet / confirm ---------- */
+var sheet = document.getElementById('sheet'), sheetBackdrop = document.getElementById('sheetBackdrop');
+function openSheet(store){
+  activeStore = store; receiveMode = null;
+  document.getElementById('storeIco').style.background = store.color;
+  document.getElementById('storeIco').textContent = store.emoji;
+  document.getElementById('storeName').textContent = store.name;
+  document.getElementById('storeDesc').textContent = store.desc;
+  document.getElementById('choicePickup').classList.remove('active');
+  document.getElementById('choiceDeliver').classList.remove('active');
+  sheet.classList.add('show'); sheetBackdrop.classList.add('show');
+}
+function closeSheet(){ sheet.classList.remove('show'); sheetBackdrop.classList.remove('show'); }
+sheetBackdrop.addEventListener('click', closeSheet);
+document.getElementById('choicePickup').addEventListener('click', function(){ receiveMode='pickup'; this.classList.add('active'); document.getElementById('choiceDeliver').classList.remove('active'); });
+document.getElementById('choiceDeliver').addEventListener('click', function(){ receiveMode='deliver'; this.classList.add('active'); document.getElementById('choicePickup').classList.remove('active'); });
+document.getElementById('confirmBtn').addEventListener('click', function(){
+  if(!activeStore) return;
+  var mode = receiveMode === 'deliver' ? 'يوصلك للسيارة وأنت في الطريق' : 'بيكون جاهز عند وصولك للمتجر';
+  document.getElementById('toastMsg').textContent = 'طلبك من «' + activeStore.name + '» ' + mode + '. (هذا تأكيد تجريبي — ربط الطلبات الفعلية يحتاج نظام خلفي منفصل)';
+  closeSheet();
+  document.getElementById('toastBackdrop').classList.add('show');
+});
+document.getElementById('toastClose').addEventListener('click', function(){ document.getElementById('toastBackdrop').classList.remove('show'); });
+</script>
+</body>
+</html>
